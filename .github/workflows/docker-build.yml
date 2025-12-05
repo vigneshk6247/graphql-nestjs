@@ -1,0 +1,96 @@
+name: Build & Auto Deploy to Minikube
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted   # Windows runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # Extract short commit SHA (Windows PowerShell)
+    - name: Extract short Git commit SHA
+      id: sha
+      shell: powershell
+      run: |
+        $short = $env:GITHUB_SHA.Substring(0,8)
+        "SHORT_SHA=$short" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    # Build Docker images with SHA + latest
+    - name: Build Docker images
+      shell: powershell
+      run: |
+        $dockerUser = "${{ secrets.DOCKER_USERNAME }}"
+        $imageName = "${{ secrets.IMAGE_NAME }}"
+
+        $tag = "${dockerUser}/${imageName}:${env:SHORT_SHA}"
+        $latest = "${dockerUser}/${imageName}:latest"
+
+        docker build -t $tag .
+        docker build -t $latest .
+
+    # Push Docker images
+    - name: Push Docker images
+      shell: powershell
+      run: |
+        $dockerUser = "${{ secrets.DOCKER_USERNAME }}"
+        $imageName = "${{ secrets.IMAGE_NAME }}"
+
+        $tag = "${dockerUser}/${imageName}:${env:SHORT_SHA}"
+        $latest = "${dockerUser}/${imageName}:latest"
+
+        docker push $tag
+        docker push $latest
+
+
+    # Deploy to Minikube
+    - name: Auto Deploy to Minikube
+      shell: powershell
+      run: |
+        $dockerUser = "${{ secrets.DOCKER_USERNAME }}"
+        $imageName = "${{ secrets.IMAGE_NAME }}"
+
+        kubectl set image deployment/graphql-nestjs graphql-nestjs="${dockerUser}/${imageName}:${env:SHORT_SHA}" --namespace=default
+        kubectl rollout status deployment/graphql-nestjs --namespace=default
+
+    # Update deployment.yaml in repo
+    - name: Update deployment.yaml in repo
+      shell: powershell
+      run: |
+        (Get-Content k8s/deployment.yaml) `
+          -replace "image:.*", "image: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}:${env:SHORT_SHA}" `
+          | Set-Content k8s/deployment.yaml
+
+
+    # Commit changes
+    - name: Commit updated deployment file
+      shell: powershell
+      run: |
+        git config --global user.email "runner@example.com"
+        git config --global user.name "GitHub Runner"
+
+        git add k8s/deployment.yaml
+
+        git commit -m "Auto-update image tag to ${env:SHORT_SHA}"
+        if ($LASTEXITCODE -ne 0) { Write-Output "No changes to commit"; exit 0 }
+
+        git pull --rebase origin main
+        git push origin main
+
+
+
+
+

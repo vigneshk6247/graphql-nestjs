@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-nestjs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graphql-nestjs
+  template:
+    metadata:
+      labels:
+        app: graphql-nestjs
+    spec:
+      containers:
+        - name: graphql-nestjs
+          image: vigneshk1045/graphql-nestjs:latest
+          ports:
+            - containerPort: 3000
