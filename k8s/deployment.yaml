@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: graphql-nestjs
-          image: vigneshk1045/graphql-nestjs:latest
+          image: vigneshk1045/graphql-nestjs:latests
           ports:
             - containerPort: 3000
           env:
